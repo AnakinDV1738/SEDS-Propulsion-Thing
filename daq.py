@@ -1,3 +1,4 @@
+import numpy as np
 from uldaq import (get_daq_device_inventory, DaqDevice, AInScanFlag,
                    AiInputMode, AiQueueElement, create_float_buffer,
                    ScanOption, InterfaceType)
@@ -12,7 +13,7 @@ class DAQ:
         self.ai_device = None
         self.interface_type = interface_type
 
-    def connect(self, descriptor_index=0):
+    def connect(self, descriptor_index):
         try:
             devices = get_daq_device_inventory(self.interface_type)
             if not devices:
@@ -39,6 +40,21 @@ class DAQ:
             self.daq_device.connect(connection_code=0)
         except Exception as e:
             print('\n', e)
+
+    def get_calibration_voltage(self):
+        try:
+            calibration_params = daq.setup_scan(low_channel=0, high_channel=3, samples_per_channel=250  ,
+                                                rate=100, scan_options=ScanOption.DEFAULTIO | ScanOption.CONTINUOUS,
+                                                flags=AInScanFlag.DEFAULT)
+            daq.start_scan(calibration_params)
+            data = calibration_params[-1]
+            avg = np.mean(data)
+            daq.stop_scan()
+            return avg
+
+        except Exception as e:
+            print("\n", e)
+            return None
 
     def disconnect(self):
         try:
