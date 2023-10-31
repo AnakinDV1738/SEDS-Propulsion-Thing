@@ -25,6 +25,13 @@ class ui_states(Enum):
     TEST_FIRE = 2
 
 
+# Enum for test fire states
+class test_fire_ui_states(Enum):
+    START = 1
+    DATA_ACQUISITION = 2
+    FINISHED = 3
+
+
 ctk.set_default_color_theme("dark-blue")  # theme for the UI
 ctk.set_appearance_mode("dark")
 
@@ -42,6 +49,7 @@ class UI(ctk.CTk):
         # self.pressure_transducer_daq.connect(1)
 
         self.ui_state = ui_states.CALIBRATION  # Initial state of UI
+        self.test_fire_state = None
 
         # Title and size
         self.title("UB SEDS Test Fire Interface")
@@ -93,17 +101,23 @@ class UI(ctk.CTk):
         self.finish_calibration_button = ctk.CTkButton(self, text="FINISH CALIBRATION", command=self.finish_calibration)
         self.finish_calibration_button.configure(height=20)
 
-        # Calibration weight and voltages stored here, gets updated every time datapoints get added or removed
-        self.weights = []
-        self.voltages = []
+        # Begin Test Fire button for the test fire UI
+        self.begin_test_fire = ctk.CTkButton(self, text="Start Test Fire")  # Need to add command
 
         # Storing the linear regression parameters everytime we have 5 or more datapoints
         self.slope = None
         self.intercept = None
 
-        self.set_UI_visibility()
+        # Displaying Linear Regressions Parameters
+        self.linear_regression_parameters = Label(self)
 
-    def set_UI_visibility(self):
+        # Calibration weight and voltages stored here, gets updated every time datapoints get added or removed
+        self.weights = []
+        self.voltages = []
+
+        self.set_UI_visibility_based_on_state()
+
+    def set_UI_visibility_based_on_state(self):
         if self.ui_state == ui_states.CALIBRATION:
             self.table.place(x=50, y=150)
             self.canvas.get_tk_widget().place(x=350, y=50)
@@ -112,12 +126,20 @@ class UI(ctk.CTk):
             self.remove_button.place(x=150, y=280)
             self.finish_calibration_button.place(x=90, y=330)
         else:
+            # Forget other widgets
             self.table.place_forget()
             self.canvas.get_tk_widget().place_forget()
             self.data_entry_submit_button.place_forget()
             self.data_entry_field.place_forget()
             self.remove_button.place_forget()
             self.finish_calibration_button.place_forget()
+            # Check for test fire state
+            if self.test_fire_state == test_fire_ui_states.START:
+                self.begin_test_fire.pack(expand=True)
+                self.linear_regression_parameters.place(x=100, y=0)
+                self.linear_regression_parameters.config(text=f"Linear Regression Parameters - "
+                                                              f"Slope: {self.slope} "
+                                                              f"Intercept: {self.intercept}")
 
     # Function to get entries from the textbox
     # See "data_entry_submit_button" command, its this function
@@ -141,7 +163,7 @@ class UI(ctk.CTk):
             self.weights.append(total_pounds)
             # Adding calibration voltage, calling method on load_cell_daq object, check daq.py for implementation
             self.voltages.append(np.random.randint(10000))
-            # self.load_cell_daq.get_calibration_voltage() -> I want to add this code, but its still in progress
+            # self.load_cell_daq.get_calibration_voltage() -> I want to add this code, but it's still in progress
             # And I can't test this code if this line is in there because I don't have a DAQ connected
 
             # Everytime there is a change to the weights/voltages, we update the table and graph
@@ -201,7 +223,8 @@ class UI(ctk.CTk):
     def finish_calibration(self):
         if len(self.weights) >= 5:
             self.ui_state = ui_states.TEST_FIRE
-            self.set_UI_visibility()
+            self.test_fire_state = test_fire_ui_states.START
+            self.set_UI_visibility_based_on_state()
 
 
 # Run the code with a __main__ function
@@ -212,16 +235,14 @@ if __name__ == "__main__":
 
 '''
 Calibration interface is more or less complete
-
 Next Steps
-1. Add a "finish" button that concludes calibration and stores weight and bias in instance variables
+1. Add a "finish" button that concludes calibration and stores weight and bias in instance variables (finished)
 2. Clear the screen and add "start test fire" button which should be pressed just before the switch is flipped
     a. maybe make this button the actual button that triggers the test fire (later update)
-    b. add a secondary check to make sure that user intended to start test fire
-3. Live data reading will be hard -- add animation that says test fire in progress dot dot dot (something fun!)
-    a. When the secondary check is confirmed, replace start test fire button with "end test fire" button
+3. Live data reading will be hard
+    a. Have a live counter of the data being collected
     b. Store all the data in pandas dataframe - easy to analyze (download necessary libraries on RaspberryPi)
-    c. Display pressure transducer data, and raw load cell data
+    c. Display pressure transducer data, and raw load cell data (processed slightly)
     d. Display calibrated load cell data
     e. Ask Schooner what other data analysis needs to be done
 - Parth
