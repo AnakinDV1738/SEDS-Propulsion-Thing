@@ -1,15 +1,14 @@
 from tkinter import *
 from tkinter.ttk import *
-from typing import Tuple
+from typing import Tuple, Union
 import customtkinter as ctk
 import numpy as np
 import re
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from PIL import ImageTk, Image
+# from PIL import ImageTk, Image
 from enum import Enum
-
-# from daq import DAQ
+from daq import DAQ
 
 '''
 UB SEDS Data Logger Interface
@@ -37,14 +36,14 @@ ctk.set_appearance_mode("dark")
 
 
 class UI(ctk.CTk):
-    def __init__(self, fg_color: str | Tuple[str, str] | None = None, **kwargs):  # inherits from CustomTkinter
+    def __init__(self, fg_color: Union[str, Tuple[str, str], None] = None, **kwargs):  # inherits from CustomTkinter
         # "self." separates instance variables from regular variables
         # all variables with "self." will be created every time a new UI object is created
         super().__init__(fg_color, **kwargs)  # CustomTkinter has its own __init__ method which we are calling
 
         # Creating two DAQ objects: load cell and pressure transducer and connecting to them
-        # self.load_cell_daq = DAQ()
-        # self.load_cell_daq.connect(0)
+        self.load_cell_daq = DAQ()
+        self.load_cell_daq.connect()
         # self.pressure_transducer_daq = DAQ()
         # self.pressure_transducer_daq.connect(1)
 
@@ -56,11 +55,11 @@ class UI(ctk.CTk):
         self.geometry("1000x600")
 
         # Adding UB SEDS logo to the top-right corner
-        img = Image.open("ubseds_white.png")
-        img = img.resize((79, 25))
-        self.logo = ImageTk.PhotoImage(img)
-        self.logo_label = Label(image=self.logo)
-        self.logo_label.place(x=10, y=10)
+        # img = Image.open("ubseds_white.png")
+        # img = img.resize((79, 25))
+        # self.logo = ImageTk.PhotoImage(img)
+        # self.logo_label = Label(image=self.logo)
+        # self.logo_label.place(x=10, y=10)
 
         # Adding interactive table
         # note all the "self" which makes sures that all changes happen to the table instance variable
@@ -97,6 +96,12 @@ class UI(ctk.CTk):
         self.remove_button = ctk.CTkButton(self, text="❌", command=self.remove_entry)
         self.remove_button.configure(height=25, width=20)
 
+        # Text Reminder for user
+        self.reminder = Label(self, text="Reminder:\n"
+                                         "Pressure Transducer goes int CH0 \n"
+                                         "Load Cell goes into CH1",
+                              justify='center')
+
         # Finish Calibration button to transition UI from calibration to test fire
         self.finish_calibration_button = ctk.CTkButton(self, text="FINISH CALIBRATION", command=self.finish_calibration)
         self.finish_calibration_button.configure(height=20)
@@ -125,6 +130,7 @@ class UI(ctk.CTk):
             self.data_entry_field.place(x=50, y=100)
             self.remove_button.place(x=150, y=280)
             self.finish_calibration_button.place(x=90, y=330)
+            self.reminder.place(x=100, y=10)
         else:
             # Forget other widgets
             self.table.place_forget()
@@ -133,6 +139,7 @@ class UI(ctk.CTk):
             self.data_entry_field.place_forget()
             self.remove_button.place_forget()
             self.finish_calibration_button.place_forget()
+            self.reminder.place_forget()
             # Check for test fire state
             if self.test_fire_state == test_fire_ui_states.START:
                 self.begin_test_fire.pack(expand=True)
@@ -162,8 +169,8 @@ class UI(ctk.CTk):
             # Adding weights from textbox into the weights list (INSTANCE VARIABLE)
             self.weights.append(total_pounds)
             # Adding calibration voltage, calling method on load_cell_daq object, check daq.py for implementation
-            self.voltages.append(np.random.randint(10000))
-            # self.load_cell_daq.get_calibration_voltage() -> I want to add this code, but it's still in progress
+            # self.voltages.append(np.random.randint(10000))
+            self.voltages.append(self.load_cell_daq.get_calibration_voltage())
             # And I can't test this code if this line is in there because I don't have a DAQ connected
 
             # Everytime there is a change to the weights/voltages, we update the table and graph
