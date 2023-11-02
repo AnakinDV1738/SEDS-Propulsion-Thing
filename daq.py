@@ -99,36 +99,55 @@ class DAQ:
             print('\n', e)
 
     def get_calibration_voltage(self):
-        scan_params = self.setup_scan(channels=[1], samples_per_channel=2500,
-                                      rate=1000, scan_options=ScanOption.DEFAULTIO | ScanOption.CONTINUOUS,
-                                      flags=AInScanFlag.DEFAULT)
-
-        channels, input_mode, range_index, samples_per_channel, \
-            rate, scan_options, flags, data = scan_params
-
-        rate = self.ai_device.a_in_scan(channels[0], channels[-1], input_mode,
-                                        range_index, samples_per_channel,
-                                        rate, scan_options, flags, data)
-
-        sleep(1)
-        samples_acquired = 0
-        data_list = []
-        while samples_acquired < samples_per_channel:
-            status, transfer_status = self.ai_device.get_scan_status()
-            index = transfer_status.current_index
-            data_list.append(data[index])
-            samples_acquired += 1
-
-        avg = np.mean(data_list)
-        print(f"\nAverage of {samples_per_channel} samples: {avg}")
-        return avg
-
-    def start_scan(self, scan_params):
         try:
-            low_channel, high_channel, input_mode, range_index, samples_per_channel, \
+            if self.daq_device is None or not self.daq_device.is_connected():
+                print("Error: DAQ device is not connected.")
+                return None
+
+            scan_params = self.setup_scan(channels=[1], samples_per_channel=2500,
+                                          rate=1000, scan_options=ScanOption.DEFAULTIO | ScanOption.CONTINUOUS,
+                                          flags=AInScanFlag.DEFAULT)
+
+            channels, input_mode, range_index, samples_per_channel, \
                 rate, scan_options, flags, data = scan_params
 
-            rate = self.ai_device.a_in_scan(low_channel, high_channel, input_mode,
+            rate = self.ai_device.a_in_scan(channels[0], channels[-1], input_mode,
+                                            range_index, samples_per_channel,
+                                            rate, scan_options, flags, data)
+
+            sleep(1)
+            samples_acquired = 0
+            data_list = []
+            while samples_acquired < samples_per_channel:
+                status, transfer_status = self.ai_device.get_scan_status()
+                index = transfer_status.current_index
+                data_list.append(data[index])
+                samples_acquired += 1
+
+            avg = np.mean(data_list)
+            print(data_list)
+            print(f"\nAverage of {samples_per_channel} samples: {avg}")
+            return avg
+
+        except Exception as e:
+            print('\n', e)
+            return None
+
+        finally:
+            self.daq_device.release()
+
+    def start_scan(self):
+        try:
+            channels = [0, 1]  # Define the channels you want to scan
+            samples_per_channel = 1000  # Define the number of samples per channel
+            rate = 1000  # Define the scan rate in Hz
+            scan_options = ScanOption.DEFAULTIO | ScanOption.CONTINUOUS  # Define the scan options
+            flags = AInScanFlag.DEFAULT  # Define the flags
+
+            channels, input_mode, range_index, samples_per_channel, rate, scan_options, flags, data = (
+                self.setup_scan(channels, samples_per_channel, rate, scan_options, flags))
+
+            rate = self.ai_device.a_in_scan(channels[0], channels[-1], input_mode,
                                             range_index, samples_per_channel,
                                             rate, scan_options, flags, data)
 
@@ -153,16 +172,19 @@ class DAQ:
                           transfer_status.current_scan_count)
                     print('currentIndex = ', index, '\n')
 
-                    for i in range(high_channel - low_channel + 1):
-                        print('chan =',
-                              i + low_channel, ': ',
-                              '{:.6f}'.format(data[index + i]))
+                    for i in range(len(channels)):
+                        print(f'chan {channels[i]}: {data[index + i]} V')
 
                     sleep(0.1)
                 except (ValueError, NameError, SyntaxError):
                     break
+
         except KeyboardInterrupt:
             pass
+
+        finally:
+            self.daq_device.release()
+
 
     @staticmethod
     def display_scan_options(bit_mask):
@@ -183,17 +205,8 @@ class DAQ:
         stdout.write('\x1b[2K')
 
 
-# Example usage:
-
-# Create a DAQ object
-# daq = DAQ()
-
-# Connect to a DAQ device
-# daq.connect()
-# daq.get_calibration_voltage()
-
-# Disconnect from the DAQ device
+daq = DAQ()
+daq.connect()
+daq.start_scan()
 # daq.disconnect()
 
-# Release resources
-# daq.release()
