@@ -52,12 +52,9 @@ class UI(ctk.CTk):
         # self.pressure_transducer_daq.connect(1)
 
         self.ui_state = ui_states.CALIBRATION  # Initial state of UI
-<<<<<<< Updated upstream
         self.calibration_state = calibration_states.REMINDER
         self.test_fire_state = None
-=======
         self.test_fire_state = None 
->>>>>>> Stashed changes
 
         # Title and size
         self.title("UB SEDS Test Fire Interface")
