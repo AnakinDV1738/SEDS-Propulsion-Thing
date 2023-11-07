@@ -1,3 +1,5 @@
+import threading
+
 import numpy as np
 from uldaq import (get_daq_device_inventory, DaqDevice, AInScanFlag,
                    AiInputMode, AiQueueElement, create_float_buffer,
@@ -9,9 +11,14 @@ from sys import stdout
 
 class DAQ:
     def __init__(self, interface_type=InterfaceType.ANY):
+        self.data = None
+        self.scan_thread = None
+        self.rate = None
         self.daq_device = None
         self.ai_device = None
         self.interface_type = interface_type
+        self.isTerminated = False
+        self.channels = [1,2]
 
     def connect(self, descriptor_index=0):
         try:
@@ -115,7 +122,6 @@ class DAQ:
                                             range_index, samples_per_channel,
                                             rate, scan_options, flags, data)
 
-            sleep(1)
             samples_acquired = 0
             data_list = []
             while samples_acquired < samples_per_channel:
@@ -138,53 +144,78 @@ class DAQ:
 
     def start_scan(self):
         try:
-            channels = [0, 1]  # Define the channels you want to scan
             samples_per_channel = 1000  # Define the number of samples per channel
             rate = 1000  # Define the scan rate in Hz
             scan_options = ScanOption.DEFAULTIO | ScanOption.CONTINUOUS  # Define the scan options
             flags = AInScanFlag.DEFAULT  # Define the flags
 
             channels, input_mode, range_index, samples_per_channel, rate, scan_options, flags, data = (
-                self.setup_scan(channels, samples_per_channel, rate, scan_options, flags))
+                self.setup_scan(self.channels, samples_per_channel, rate, scan_options, flags))
 
-            rate = self.ai_device.a_in_scan(channels[0], channels[-1], input_mode,
-                                            range_index, samples_per_channel,
-                                            rate, scan_options, flags, data)
+            self.rate = rate  # Store rate as an instance variable for future reference
+            self.data = data  # Store data buffer as an instance variable for future reference
 
+            self.scan_thread = threading.Thread(target=self._perform_scan,
+                                                args=(channels,))  # Pass channels as argument
+            self.scan_thread.daemon = True
+            self.scan_thread.start()
+
+        except Exception as e:
+            print('\n', e)
+
+    def _perform_scan(self, channels):
+        try:
             system('clear')
+            while not self.isTerminated:
+                status, transfer_status = self.ai_device.get_scan_status()
+                index = transfer_status.current_index
 
-            while True:
-                try:
-                    status, transfer_status = self.ai_device.get_scan_status()
+                self.reset_cursor()
+                print('Please enter CTRL + C to terminate the process\n')
+                descriptor = self.daq_device.get_descriptor()
+                print('Active DAQ device: ', descriptor.dev_string, ' (',
+                      descriptor.unique_id, ')\n', sep='')
 
-                    self.reset_cursor()
-                    print('Please enter CTRL + C to terminate the process\n')
-                    descriptor = self.daq_device.get_descriptor()
-                    print('Active DAQ device: ', descriptor.dev_string, ' (',
-                          descriptor.unique_id, ')\n', sep='')
+                print('actual scan rate = ', '{:.6f}'.format(self.rate), 'Hz\n')
 
-                    print('actual scan rate = ', '{:.6f}'.format(rate), 'Hz\n')
+                index = transfer_status.current_index
+                print('currentTotalCount = ',
+                      transfer_status.current_total_count)
+                print('currentScanCount = ',
+                      transfer_status.current_scan_count)
+                print('currentIndex = ', index, '\n')
 
-                    index = transfer_status.current_index
-                    print('currentTotalCount = ',
-                          transfer_status.current_total_count)
-                    print('currentScanCount = ',
-                          transfer_status.current_scan_count)
-                    print('currentIndex = ', index, '\n')
+                for i, channel in enumerate(channels):
+                    # Calculate the index for the data corresponding to the current channel
+                    data_index = index + i
+                    voltage = self.data[data_index]
+                    print(f'chan {channel}: {voltage} V')
 
-                    for i in range(len(channels)):
-                        print(f'chan {channels[i]}: {data[index + i]} V')
+                sleep(0.1)
 
-                    sleep(0.1)
-                except (ValueError, NameError, SyntaxError):
-                    break
-
-        except KeyboardInterrupt:
-            pass
+        except Exception as e:
+            print('\n', e)
 
         finally:
             self.daq_device.release()
 
+    def get_scan_data(self):
+        channel_data = []
+
+        if self.data is not None and self.channels is not None:
+            for channel in self.channels:
+                start_index = channel * 1000
+                end_index = start_index + self.samples_per_channel
+                channel_data.append(self.data[start_index:end_index])
+
+        return channel_data
+
+    def terminate_scan(self):
+        try:
+            self.isTerminated = True
+
+        except Exception as e:
+            print('\n', e)
 
     @staticmethod
     def display_scan_options(bit_mask):
@@ -205,8 +236,8 @@ class DAQ:
         stdout.write('\x1b[2K')
 
 
-daq = DAQ()
-daq.connect()
-daq.start_scan()
-# daq.disconnect()
+if __name__ == "__main__":
+    daq = DAQ()
+    daq.connect()
+
 

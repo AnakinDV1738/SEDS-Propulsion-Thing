@@ -9,7 +9,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 # from PIL import ImageTk, Image
 from enum import Enum
 
-from daq import DAQ
+# from daq import DAQ
 
 '''
 UB SEDS Data Logger Interface
@@ -59,13 +59,6 @@ class UI(ctk.CTk):
         self.title("UB SEDS Test Fire Interface")
         self.geometry("1000x600")
 
-        # Adding UB SEDS logo to the top-left corner
-        # img = Image.open("ubseds_white.png")
-        # img = img.resize((79, 25))
-        # self.logo = ImageTk.PhotoImage(img)
-        # self.logo_label = Label(image=self.logo)
-        # self.logo_label.place(x=10, y=10)
-
         # Adding interactive table
         # note all the "self" which makes sures that all changes happen to the table instance variable
         self.data_table = Treeview(self, columns=('Voltage', 'Weight'), show="headings")
@@ -111,14 +104,20 @@ class UI(ctk.CTk):
                                                                      "TO PUT THE PRESSURE TRANSDUCER INTO CH0\n"
                                                                      "AND\n"
                                                                      "PUT THE LOAD CELL INTO CH1\n"
-                                                                     "PLEASE CLICK THE BUTTON\n"
+                                                                     "PLEASE CLICK THIS BUTTON\n"
                                                                      "IF AND ONLY IF YOU HAVE CORRECTLY\n"
                                                                      "SET UP THE DAQ!!! - PARTH",
                                                           command=self.schooner_has_been_reminded)
         self.big_flashing_reminder_button.configure(font=('Arial', 40), fg_color='red')
 
         # Begin Test Fire button for the test fire UI
-        self.begin_test_fire = ctk.CTkButton(self, text="Start Test Fire")  # Need to add command
+        self.begin_test_fire = ctk.CTkButton(self, text="Start Test Fire", command=self.start_test_fire_button)
+        # Timer for Test Fire in milliseconds
+        self.timer = 0
+        self.timer_label = Label(self, text=f"{self.timer} ms", font=("arial", 24))
+
+        # creating finish test fire button and stop watch
+        self.terminate_button  = ctk.CTkButton(self, text="TERMINATE TEST FIRE")
 
         # Storing the linear regression parameters everytime we have 5 or more datapoints
         self.slope = None
@@ -140,6 +139,7 @@ class UI(ctk.CTk):
                 child.place_forget()
 
     def set_UI_visibility_based_on_state(self):
+        print(self.ui_state, self.calibration_state, self.test_fire_state)
         self.clear_screen()
         if self.ui_state == ui_states.CALIBRATION:
             if self.calibration_state == calibration_states.REMINDER:
@@ -157,14 +157,18 @@ class UI(ctk.CTk):
                 self.linear_regression_parameters.place(x=400, y=0)
                 self.linear_regression_parameters.config(text=f"Linear Regression Parameters\n"
                                                               f"Slope: {round(self.slope, 3)}\n"
-                                                              f"Intercept: {round(self.intercept, 3)}")
+                                                              f"Intercept: {round(self.intercept, 3)}", justify="center")
+            if self.test_fire_state == test_fire_ui_states.DATA_ACQUISITION:
+                self.terminate_button.pack(expand=True)
+                self.timer_label.place(x=10, y=10)
+                self.timer_update()
 
     # Function to get entries from the textbox
     # See "data_entry_submit_button" command, its this function
     def get_input_calibration_datapoints(self):
         if self.ui_state == ui_states.CALIBRATION:
-            load_cell_daq = DAQ()
-            load_cell_daq.connect()
+            # load_cell_daq = DAQ()
+            # load_cell_daq.connect()
             expression = self.data_entry_field.get()  # Method from CustomTkinter to get the values inside the textbox
             conversions = {"kgs": 2.20462, "kg": 2.20462, "lb": 1, "lbs": 1}  # Map of units to their conversions in lbs
             matches = re.findall(r'(\d+(\.\d+)?)\s*([A-Za-z]+)?', expression)  # regex to allow varied units input
@@ -182,10 +186,9 @@ class UI(ctk.CTk):
             # Adding weights from textbox into the weights list (INSTANCE VARIABLE)
             self.weights.append(total_pounds)
             # Adding calibration voltage, calling method on load_cell_daq object, check daq.py for implementation
-            # self.voltages.append(np.random.randint(10000))
-            self.voltages.append(load_cell_daq.get_calibration_voltage())
-            # And I can't test this code if this line is in there because I don't have a DAQ connected
-            load_cell_daq.disconnect()
+            self.voltages.append(np.random.randint(10000))
+            # self.voltages.append(load_cell_daq.get_calibration_voltage())
+            # load_cell_daq.disconnect()
             # Everytime there is a change to the weights/voltages, we update the table and graph
             self.update_table()
             self.update_graph()
@@ -254,6 +257,16 @@ class UI(ctk.CTk):
             self.calibration_state = calibration_states.INTERFACE
             self.set_UI_visibility_based_on_state()
 
+    def start_test_fire_button(self):
+        if self.ui_state == ui_states.TEST_FIRE and self.test_fire_state == test_fire_ui_states.START:
+            self.test_fire_state = test_fire_ui_states.DATA_ACQUISITION
+            self.set_UI_visibility_based_on_state()
+
+    def timer_update(self):
+        self.timer += 1
+        self.timer_label.config(text=f"{self.timer} ms", font=("Arial", 24))
+        self.after(1, self.timer_update)
+
 
 # Run the code with a __main__ function
 # Equivalent to "public static void main(String[] args)" from Java
@@ -273,5 +286,6 @@ Next Steps
     c. Display pressure transducer data, and raw load cell data (processed slightly)
     d. Display calibrated load cell data
     e. Ask Schooner what other data analysis needs to be done
+    f. words of affirmation for propulsion  
 - Parth
 '''
