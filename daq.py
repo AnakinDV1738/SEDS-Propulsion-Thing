@@ -4,21 +4,17 @@ import numpy as np
 from uldaq import (get_daq_device_inventory, DaqDevice, AInScanFlag,
                    AiInputMode, AiQueueElement, create_float_buffer,
                    ScanOption, InterfaceType)
-from time import sleep
 from os import system
-from sys import stdout
 
 
 class DAQ:
     def __init__(self, interface_type=InterfaceType.ANY):
-        self.data = None
-        self.scan_thread = None
-        self.rate = None
         self.daq_device = None
         self.ai_device = None
         self.interface_type = interface_type
-        self.isTerminated = False
-        self.channels = [1,2]
+        self.scanning = True
+        self.pressure_transducer = []
+        self.load_cell = []
 
     def connect(self, descriptor_index=0):
         try:
@@ -143,101 +139,47 @@ class DAQ:
             self.daq_device.release()
 
     def start_scan(self):
-        try:
-            samples_per_channel = 1000  # Define the number of samples per channel
-            rate = 1000  # Define the scan rate in Hz
-            scan_options = ScanOption.DEFAULTIO | ScanOption.CONTINUOUS  # Define the scan options
-            flags = AInScanFlag.DEFAULT  # Define the flags
+        self.scanning = True
 
-            channels, input_mode, range_index, samples_per_channel, rate, scan_options, flags, data = (
-                self.setup_scan(self.channels, samples_per_channel, rate, scan_options, flags))
+        def scan_thread():
+            try:
+                channels = [0, 1]  # Define the channels you want to scan
+                samples_per_channel = 1000  # Define the number of samples per channel
+                rate = 1000  # Define the scan rate in Hz
+                scan_options = ScanOption.DEFAULTIO | ScanOption.CONTINUOUS  # Define the scan options
+                flags = AInScanFlag.DEFAULT  # Define the flags
 
-            self.rate = rate  # Store rate as an instance variable for future reference
-            self.data = data  # Store data buffer as an instance variable for future reference
+                channels, input_mode, range_index, samples_per_channel, rate, scan_options, flags, data = (
+                    self.setup_scan(channels, samples_per_channel, rate, scan_options, flags))
 
-            self.scan_thread = threading.Thread(target=self._perform_scan,
-                                                args=(channels,))  # Pass channels as argument
-            self.scan_thread.daemon = True
-            self.scan_thread.start()
+                rate = self.ai_device.a_in_scan(channels[0], channels[-1], input_mode,
+                                                range_index, samples_per_channel,
+                                                rate, scan_options, flags, data)
 
-        except Exception as e:
-            print('\n', e)
+                system('clear')
 
-    def _perform_scan(self, channels):
-        try:
-            system('clear')
-            while not self.isTerminated:
-                status, transfer_status = self.ai_device.get_scan_status()
-                index = transfer_status.current_index
+                while self.scanning:
+                    try:
+                        status, transfer_status = self.ai_device.get_scan_status()
+                        index = transfer_status.current_index
+                        for i in range(len(channels)):
+                            if (index + i) % 2 == 0:
+                                self.pressure_transducer.append(data[index + i])
+                            else:
+                                self.load_cell.append(data[index + i])
+                            print(f'chan {channels[i]}: {data[index + i]}')
 
-                self.reset_cursor()
-                print('Please enter CTRL + C to terminate the process\n')
-                descriptor = self.daq_device.get_descriptor()
-                print('Active DAQ device: ', descriptor.dev_string, ' (',
-                      descriptor.unique_id, ')\n', sep='')
+                    except Exception as e:
+                        print('\n', e)
 
-                print('actual scan rate = ', '{:.6f}'.format(self.rate), 'Hz\n')
+            except Exception as e:
+                print('\n', e)
 
-                index = transfer_status.current_index
-                print('currentTotalCount = ',
-                      transfer_status.current_total_count)
-                print('currentScanCount = ',
-                      transfer_status.current_scan_count)
-                print('currentIndex = ', index, '\n')
+        scan_thread = threading.Thread(target=scan_thread)
+        scan_thread.start()
 
-                for i, channel in enumerate(channels):
-                    # Calculate the index for the data corresponding to the current channel
-                    data_index = index + i
-                    voltage = self.data[data_index]
-                    print(f'chan {channel}: {voltage} V')
-
-                sleep(0.1)
-
-        except Exception as e:
-            print('\n', e)
-
-        finally:
-            self.daq_device.release()
-
-    def get_scan_data(self):
-        channel_data = []
-
-        if self.data is not None and self.channels is not None:
-            for channel in self.channels:
-                start_index = channel * 1000
-                end_index = start_index + self.samples_per_channel
-                channel_data.append(self.data[start_index:end_index])
-
-        return channel_data
-
-    def terminate_scan(self):
-        try:
-            self.isTerminated = True
-
-        except Exception as e:
-            print('\n', e)
-
-    @staticmethod
-    def display_scan_options(bit_mask):
-        options = []
-        if bit_mask == ScanOption.DEFAULTIO:
-            options.append(ScanOption.DEFAULTIO.name)
-        for option in ScanOption:
-            if option & bit_mask:
-                options.append(option.name)
-        return ', '.join(options)
-
-    @staticmethod
-    def reset_cursor():
-        stdout.write('\033[1;1H')
-
-    @staticmethod
-    def clear_eol():
-        stdout.write('\x1b[2K')
-
-
-if __name__ == "__main__":
-    daq = DAQ()
-    daq.connect()
-
-
+    def stop_scan(self):
+        self.scanning = False
+        self.pressure_transducer = np.array(self.pressure_transducer)
+        self.load_cell = np.array(self.load_cell)
+        return self.pressure_transducer, self.load_cell
