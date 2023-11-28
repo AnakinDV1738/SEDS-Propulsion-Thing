@@ -295,18 +295,7 @@ class UI(ctk.CTk):
             self.test_fire_state = test_fire_ui_states.PRESSURE_TRANSDUCER
             self.set_UI_visibility_based_on_state()
 
-    def save_data_as_csv(self):
-        path = ""
-        for entry in self.data_save_entries:
-            path = path + str(entry.get()) + "_"
-        path = path[:-1]
-        print(path)  
-        os.makedirs(path)     
-        np.savetxt(os.path.join(path, "pressure_transducer.csv"), self.pressure_transducer_data, delimiter=",")
-        np.savetxt(os.path.join(path, "raw_load_cell.csv"), self.load_cell_data, delimiter=",")
-        calibrated_data = self.slope * self.load_cell_data + self.intercept
-        np.savetxt(os.path.join(path, "calibrated_load_cell.csv"), calibrated_data, delimiter=",")
-        self.destroy()
+
 
 
 if __name__ == "__main__":

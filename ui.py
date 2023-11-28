@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from enum import Enum
 from daq import DAQ
+import os
 
 '''
 UB SEDS Data Logger Interface
@@ -35,6 +36,8 @@ class test_fire_ui_states(Enum):
     RAW_LOAD_CELL = 3
     PRESSURE_TRANSDUCER = 4
     CALIBRATED_LOAD_CELL = 5
+    SAVE_DATA = 6
+    
 
 
 ctk.set_default_color_theme("dark-blue")  # theme for the UI
@@ -130,6 +133,9 @@ class UI(ctk.CTk):
         self.weights = []
         self.voltages = []
 
+        self.data_save_entries = []
+        self.save_data_button = ctk.CTkButton(self, text="Save Data", command=self.save_data_as_csv)
+
         self.set_UI_visibility_based_on_state()
 
     def change_state(self, new_test_fire_state):
@@ -203,6 +209,15 @@ class UI(ctk.CTk):
                 self.test_fire_label_factory("Calibrated Load Cell Data").place(x=425, y=10)
                 self.create_state_change_button_for_test_fire_ui("Previous",
                                                                  test_fire_ui_states.RAW_LOAD_CELL).place(x=10, y=10)
+                self.create_state_change_button_for_test_fire_ui("Next", test_fire_ui_states.SAVE_DATA).place(x=850, y=10)
+            elif self.test_fire_state == test_fire_ui_states.SAVE_DATA:
+                self.save_data_button.pack(expand=True)
+                self.test_fire_label_factory("ENTER TEST PARAMETERS\nINCLUDE NO SPACES\nALL DATES IN NUMBERS\nYEAR IN FULL FORM").place(x=410, y=50)
+                placeholder_texts = ["Test Type", "Month", "Day", "Year"]
+                for i in range(4):
+                    entry = ctk.CTkEntry(self, placeholder_text=placeholder_texts[i])
+                    entry.place(x=200+(i*150), y=200)
+                    self.data_save_entries.append(entry)
 
     # Function to get entries from the textbox
     # See "data_entry_submit_button" command, its this function
@@ -318,6 +333,22 @@ class UI(ctk.CTk):
             self.test_fire_daq.release()
             self.test_fire_state = test_fire_ui_states.PRESSURE_TRANSDUCER
             self.set_UI_visibility_based_on_state()
+
+    def save_data_as_csv(self):
+        path = ""
+        for entry in self.data_save_entries:
+            path = path + str(entry.get()) + "_"
+        path = path[:-1]
+        root_path = os.path.expanduser("~/pydaq/testFireData")
+        folder_path = os.path.join(root_path, path)
+        os.makedirs(folder_path, exist_ok=True)     
+
+        np.savetxt(os.path.join(folder_path, "pressure_transducer.csv"), self.pressure_transducer_data, delimiter=",")
+        np.savetxt(os.path.join(folder_path, "raw_load_cell.csv"), self.load_cell_data, delimiter=",")
+        calibrated_data = self.slope * self.load_cell_data + self.intercept
+        np.savetxt(os.path.join(folder_path, "calibrated_load_cell.csv"), calibrated_data, delimiter=",")
+        self.destroy()
+
 
 
 # Run the code with a __main__ function
