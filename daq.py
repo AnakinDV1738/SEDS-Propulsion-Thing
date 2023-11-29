@@ -9,7 +9,7 @@ from os import system
 
 class DAQ:
     def __init__(self, interface_type=InterfaceType.ANY):
-        self.daq_device = None
+        self.daq_device = None  
         self.ai_device = None
         self.interface_type = interface_type
         self.scanning = True
